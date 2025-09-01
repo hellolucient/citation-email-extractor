@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: citation-email-extractor
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT app:app"
+    plan: starter
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_SEARCH_ENGINE_ID
+        sync: false
+      - key: MAX_GOOGLE_QUERIES_PER_RUN
+        value: "80"

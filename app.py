@@ -348,7 +348,7 @@ def upload_file():
             # Add a small delay to be respectful to APIs
             time.sleep(0.5)
         
-        # Create output CSV
+        # Create output CSV (in-memory)
         output = io.StringIO()
         fieldnames = ['citation', 'doi', 'corresponding_author', 'email', 'affiliation', 'status']
         writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -379,6 +379,18 @@ def upload_file():
         writer.writerow({'citation': 'top_email_domains (domain=count)'})
         for dom, cnt in top_domains:
             writer.writerow({'citation': dom, 'status': str(cnt)})
+
+        # If stream mode requested, return CSV directly (no disk write)
+        if request.args.get('stream') == '1':
+            csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+            csv_bytes.seek(0)
+            stream_filename = f"processed_footnotes_{int(time.time())}.csv"
+            return send_file(
+                csv_bytes,
+                as_attachment=True,
+                download_name=stream_filename,
+                mimetype='text/csv'
+            )
         
         # Save to file
         output_filename = f"processed_footnotes_{int(time.time())}.csv"

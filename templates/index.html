@@ -154,6 +154,10 @@
             <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
                 Choose CSV File
             </button>
+            <div style="margin-top:10px;">
+                <label><input type="checkbox" id="downloadImmediately"> Download immediately (no server storage)</label>
+            </div>
+            <button class="upload-btn" id="processBtn">Process File</button>
             <p><small>Maximum file size: 16MB</small></p>
         </div>
 
@@ -244,7 +248,14 @@
             }
         });
 
-        fileInput.addEventListener('change', processFile);
+        const processBtn = document.getElementById('processBtn');
+        const downloadImmediately = document.getElementById('downloadImmediately');
+
+        fileInput.addEventListener('change', () => {
+            // If user enabled immediate download, do not auto-process on file-select
+            if (!downloadImmediately.checked) processFile();
+        });
+        processBtn.addEventListener('click', processFile);
 
         function processFile() {
             const file = fileInput.files[0];
@@ -271,27 +282,61 @@
                 progressFill.style.width = progressWidth + '%';
             }, 500);
 
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                clearInterval(progressInterval);
-                progressFill.style.width = '100%';
-
-                if (data.success) {
-                    showResults(data);
-                } else {
-                    alert('Error: ' + data.error);
+            if (downloadImmediately.checked) {
+                // Stream mode: server returns CSV attachment directly
+                fetch('/upload?stream=1', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(async (response) => {
+                    clearInterval(progressInterval);
+                    progressFill.style.width = '100%';
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(text || 'Download failed');
+                    }
+                    return response.blob();
+                })
+                .then((blob) => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    // Try to infer filename from Content-Disposition
+                    const cd = ''; // Simplify; browsers will name it automatically if not set
+                    a.download = 'processed_footnotes.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
                     progress.style.display = 'none';
-                }
-            })
-            .catch(error => {
-                clearInterval(progressInterval);
-                alert('Error: ' + error.message);
-                progress.style.display = 'none';
-            });
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                    progress.style.display = 'none';
+                });
+            } else {
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    clearInterval(progressInterval);
+                    progressFill.style.width = '100%';
+
+                    if (data.success) {
+                        showResults(data);
+                    } else {
+                        alert('Error: ' + data.error);
+                        progress.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    clearInterval(progressInterval);
+                    alert('Error: ' + error.message);
+                    progress.style.display = 'none';
+                });
+            }
         }
 
         function showResults(data) {
