@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Footnote Citation Processor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            border: 2px dashed #ddd;
+            padding: 40px;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+        .upload-section:hover {
+            border-color: #007bff;
+        }
+        .upload-section.dragover {
+            border-color: #007bff;
+            background-color: #f8f9fa;
+        }
+        .file-input {
+            display: none;
+        }
+        .upload-btn {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        .upload-btn:hover {
+            background: #0056b3;
+        }
+        .upload-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .progress {
+            display: none;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .results {
+            display: none;
+            margin-top: 20px;
+        }
+        .results h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .download-btn {
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .download-btn:hover {
+            background: #218838;
+        }
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .preview-table th, .preview-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .preview-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .status-success {
+            color: #28a745;
+        }
+        .status-error {
+            color: #dc3545;
+        }
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .instructions h4 {
+            margin-top: 0;
+            color: #0056b3;
+        }
+        .instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 Footnote Citation Processor</h1>
+        
+        <div class="instructions">
+            <h4>How to use this tool:</h4>
+            <ul>
+                <li>Prepare a CSV file with your footnotes/citations in the first column</li>
+                <li>Each row should contain one complete citation</li>
+                <li>The tool will extract DOI/PMID and find corresponding author contact information</li>
+                <li>Results will include author name, email, affiliation, and status</li>
+            </ul>
+        </div>
+
+        <div class="upload-section" id="uploadSection">
+            <h3>📁 Upload your CSV file</h3>
+            <p>Drag and drop your CSV file here, or click to browse</p>
+            <input type="file" id="fileInput" class="file-input" accept=".csv">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                Choose CSV File
+            </button>
+            <p><small>Maximum file size: 16MB</small></p>
+        </div>
+
+        <div class="upload-section" id="dedupeSection" style="margin-top: 30px; border: 2px dashed #28a745;">
+            <h3>🗂️ Remove Duplicates</h3>
+            <p>Upload a processed CSV/Excel file to remove duplicate authors</p>
+            <input type="file" id="dedupeFileInput" class="file-input" accept=".csv,.xlsx,.xls">
+            <button class="upload-btn" style="background: #28a745;" onclick="document.getElementById('dedupeFileInput').click()">
+                Choose File to Deduplicate
+            </button>
+            <p><small>Supports CSV, XLSX, and XLS files</small></p>
+        </div>
+
+        <div class="progress" id="progress">
+            <p>Processing citations... This may take a few minutes.</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="progress" id="dedupeProgress" style="display: none;">
+            <p>Removing duplicates...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="dedupeProgressFill"></div>
+            </div>
+        </div>
+
+        <div class="results" id="results">
+            <h3>✅ Processing Complete!</h3>
+            <p>
+                Successfully processed <span id="totalProcessed">0</span> citations.
+                | Unique authors: <span id="uniqueAuthors">0</span>
+                | Emails found: <span id="emailsFound">0</span>
+                | Unique emails: <span id="uniqueEmails">0</span>
+            </p>
+            <div id="topDomains" style="margin:6px 0 12px 0;"></div>
+            
+            <a href="#" class="download-btn" id="downloadBtn">📥 Download Results CSV</a>
+            
+            <h4>Preview (first 5 results):</h4>
+            <table class="preview-table" id="previewTable">
+                <thead>
+                    <tr>
+                        <th>Citation</th>
+                        <th>DOI/PMID</th>
+                        <th>Corresponding Author</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="previewBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        const progress = document.getElementById('progress');
+        const results = document.getElementById('results');
+        const progressFill = document.getElementById('progressFill');
+        const totalProcessed = document.getElementById('totalProcessed');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const previewBody = document.getElementById('previewBody');
+        const uniqueAuthors = document.getElementById('uniqueAuthors');
+        const emailsFound = document.getElementById('emailsFound');
+        const uniqueEmails = document.getElementById('uniqueEmails');
+        const topDomains = document.getElementById('topDomains');
+
+        // Drag and drop functionality
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                processFile();
+            }
+        });
+
+        fileInput.addEventListener('change', processFile);
+
+        function processFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            if (!file.name.endsWith('.csv')) {
+                alert('Please upload a CSV file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show progress
+            progress.style.display = 'block';
+            results.style.display = 'none';
+            progressFill.style.width = '0%';
+
+            // Simulate progress
+            let progressWidth = 0;
+            const progressInterval = setInterval(() => {
+                progressWidth += Math.random() * 15;
+                if (progressWidth > 90) progressWidth = 90;
+                progressFill.style.width = progressWidth + '%';
+            }, 500);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+
+                if (data.success) {
+                    showResults(data);
+                } else {
+                    alert('Error: ' + data.error);
+                    progress.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                alert('Error: ' + error.message);
+                progress.style.display = 'none';
+            });
+        }
+
+        function showResults(data) {
+            progress.style.display = 'none';
+            results.style.display = 'block';
+            totalProcessed.textContent = data.total_processed;
+            if (data.summary) {
+                uniqueAuthors.textContent = data.summary.unique_authors || 0;
+                emailsFound.textContent = data.summary.emails_found || 0;
+                uniqueEmails.textContent = data.summary.unique_emails || 0;
+                if (Array.isArray(data.summary.top_domains)) {
+                    const items = data.summary.top_domains
+                        .map(([d,c]) => `${d}: ${c}`)
+                        .join(' | ');
+                    topDomains.textContent = items ? `Top domains: ${items}` : '';
+                }
+            }
+            
+            // Set download link
+            downloadBtn.href = '/download/' + data.filename;
+            
+            // Show preview
+            previewBody.innerHTML = '';
+            data.results.forEach(result => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${truncateText(result.citation, 50)}</td>
+                    <td>${result.doi || 'N/A'}</td>
+                    <td>${result.corresponding_author || 'N/A'}</td>
+                    <td>${result.email || 'N/A'}</td>
+                    <td class="status-${result.status === 'Success' ? 'success' : 'error'}">${result.status}</td>
+                `;
+                previewBody.appendChild(row);
+            });
+        }
+
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        // Deduplication functionality
+        const dedupeFileInput = document.getElementById('dedupeFileInput');
+        const dedupeProgress = document.getElementById('dedupeProgress');
+        const dedupeProgressFill = document.getElementById('dedupeProgressFill');
+
+        dedupeFileInput.addEventListener('change', function() {
+            if (this.files[0]) {
+                uploadDedupeFile(this.files[0]);
+            }
+        });
+
+        function uploadDedupeFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show progress
+            dedupeProgress.style.display = 'block';
+            results.style.display = 'none';
+
+            // Animate progress bar
+            let progressValue = 0;
+            const progressInterval = setInterval(() => {
+                progressValue += Math.random() * 15;
+                if (progressValue > 90) progressValue = 90;
+                dedupeProgressFill.style.width = progressValue + '%';
+            }, 200);
+
+            fetch('/dedupe', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearInterval(progressInterval);
+                dedupeProgressFill.style.width = '100%';
+
+                if (data.success) {
+                    showDedupeResults(data);
+                } else {
+                    alert('Error: ' + data.error);
+                    dedupeProgress.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                alert('Error: ' + error.message);
+                dedupeProgress.style.display = 'none';
+            });
+        }
+
+        function showDedupeResults(data) {
+            dedupeProgress.style.display = 'none';
+            results.style.display = 'block';
+            
+            // Update result text for deduplication
+            totalProcessed.textContent = data.final_count;
+            uniqueAuthors.textContent = data.final_count;
+            emailsFound.textContent = data.email_count;
+            uniqueEmails.textContent = data.email_count;
+            topDomains.textContent = `Removed ${data.removed_count} duplicates from ${data.original_count} original rows`;
+            
+            // Set download link
+            downloadBtn.href = '/download/' + data.filename;
+            
+            // Show preview
+            previewBody.innerHTML = '';
+            data.preview.forEach(result => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${truncateText(result.citation || 'N/A', 50)}</td>
+                    <td>${result.doi || 'N/A'}</td>
+                    <td>${result.corresponding_author || 'N/A'}</td>
+                    <td>${result.email || 'N/A'}</td>
+                    <td class="status-success">Deduplicated</td>
+                `;
+                previewBody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
